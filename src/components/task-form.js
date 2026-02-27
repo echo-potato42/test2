@@ -110,22 +110,23 @@ export function openTaskForm({ taskId = null, parentId = null } = {}) {
   modal.appendChild(tagsGroup)
 
   // Parent task selector (only for new non-subtask creation)
+  // Show tasks that are not children themselves (standalone or existing parents)
   if (!isEdit && !parentId) {
-    const topTasks = Object.values(state.tasks).filter((t) => !t.parentId)
-    if (topTasks.length > 0) {
+    const potentialParents = Object.values(state.tasks).filter((t) => !t.parentId)
+    if (potentialParents.length > 0) {
       const parentGroup = createFormGroup('Parent task (optional)', () => {
         const select = document.createElement('select')
         select.id = 'task-parent'
 
         const emptyOpt = document.createElement('option')
         emptyOpt.value = ''
-        emptyOpt.textContent = '-- None (top-level task) --'
+        emptyOpt.textContent = '-- None (standalone task) --'
         select.appendChild(emptyOpt)
 
-        for (const t of topTasks) {
+        for (const t of potentialParents) {
           const opt = document.createElement('option')
           opt.value = t.id
-          opt.textContent = t.title
+          opt.textContent = t.childIds.length > 0 ? `${t.title} (${t.childIds.length} subtasks)` : t.title
           select.appendChild(opt)
         }
 

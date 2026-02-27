@@ -287,94 +287,160 @@ body {
   font-size: 0.8rem;
 }
 
-/* === Subtasks === */
-.subtask-list {
-  margin-top: 0.5rem;
-  padding-left: 1.25rem;
+/* === Parent Overview === */
+.parent-overview {
   display: flex;
-  flex-direction: column;
-  gap: 0.3rem;
-  border-left: 2px solid var(--border);
+  gap: 0.75rem;
+  padding: 0.75rem 1.5rem;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-board);
 }
 
-.subtask-item {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  font-size: 0.8rem;
-  color: var(--text-secondary);
+.parent-card {
+  flex-shrink: 0;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.75rem;
+  min-width: 200px;
+  max-width: 280px;
 }
 
-.subtask-item input[type='checkbox'] {
-  accent-color: var(--accent);
-  width: 14px;
-  height: 14px;
-  cursor: pointer;
+.parent-card.completed {
+  opacity: 0.7;
+  border-color: var(--success);
 }
 
-.subtask-item.completed span {
+.parent-card.completed .parent-card-title {
   text-decoration: line-through;
   color: var(--text-muted);
 }
 
-.add-subtask-btn {
+.parent-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.4rem;
+}
+
+.parent-card-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.parent-progress-text {
   font-size: 0.75rem;
-  color: var(--text-muted);
+  color: var(--text-secondary);
+  margin-left: 0.5rem;
+  flex-shrink: 0;
+}
+
+.parent-progress-bar {
+  height: 4px;
+  background: var(--bg-body);
+  border-radius: 2px;
+  overflow: hidden;
+  margin-bottom: 0.4rem;
+}
+
+.parent-progress-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 2px;
+  transition: width 0.3s ease;
+}
+
+.parent-card.completed .parent-progress-fill {
+  background: var(--success);
+}
+
+.parent-tags {
+  display: flex;
+  gap: 0.3rem;
+  margin-bottom: 0.4rem;
+}
+
+.parent-card-actions {
+  display: flex;
+  gap: 0.25rem;
+  margin-top: 0.4rem;
+}
+
+.parent-card-actions .btn-icon {
   background: none;
   border: none;
+  color: var(--text-muted);
   cursor: pointer;
-  padding: 0.2rem 0;
-  margin-top: 0.25rem;
+  padding: 0.2rem 0.4rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.75rem;
+  transition: color 0.15s, background 0.15s;
 }
 
-.add-subtask-btn:hover {
-  color: var(--accent);
+.parent-card-actions .btn-icon:hover {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.08);
 }
 
-/* === Timer Display === */
-.timer-bar {
+.parent-card-actions .btn-icon.delete:hover {
+  color: var(--danger);
+  background: rgba(248, 81, 73, 0.1);
+}
+
+/* === Parent label on child cards === */
+.task-parent-label {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  margin-top: 0.15rem;
+  padding-left: 1.5rem;
+}
+
+.task-parent-label::before {
+  content: '\21B3 ';
+}
+
+/* === Card Timer === */
+.card-timer {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: var(--radius-sm);
+  padding: 0.5rem;
+  margin-top: 0.5rem;
   display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  padding: 0.5rem 1rem;
-  background: var(--bg-board);
-  border-bottom: 1px solid var(--border);
-  font-size: 0.875rem;
+  flex-direction: column;
+  gap: 0.3rem;
 }
 
-.timer-bar.hidden {
-  display: none;
+.card-timer-controls {
+  display: flex;
+  gap: 0.3rem;
+  flex-wrap: wrap;
+}
+
+.card-timer-start {
+  margin-top: 0.5rem;
+  display: flex;
+  gap: 0.3rem;
 }
 
 .timer-time {
-  font-size: 1.5rem;
+  font-size: 1.25rem;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
-  min-width: 5ch;
 }
 
 .timer-time.green { color: var(--timer-green); }
 .timer-time.yellow { color: var(--timer-yellow); }
 .timer-time.red { color: var(--timer-red); }
 
-.timer-task-name {
-  color: var(--text-secondary);
-  font-size: 0.8rem;
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .timer-paused-label {
   color: var(--warning);
   font-size: 0.75rem;
   font-weight: 600;
-}
-
-.timer-actions {
-  display: flex;
-  gap: 0.4rem;
 }
 
 /* === Modal === */
@@ -530,5 +596,9 @@ body {
 
   .app-header {
     padding: 0.75rem 1rem;
+  }
+
+  .parent-overview {
+    padding: 0.5rem 0.75rem;
   }
 }

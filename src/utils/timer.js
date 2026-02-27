@@ -1,5 +1,5 @@
 import { getState } from '../state/store.js'
-import { tickTimer, resumeTimer, stopTimer } from '../state/actions.js'
+import { tickTimer, resumeTimer, stopTimer, triggerUpdate } from '../state/actions.js'
 import { sendNotification } from '../components/notification.js'
 import { showToast } from '../components/toast.js'
 
@@ -11,16 +11,16 @@ export function startTimerLoop() {
     const state = getState()
     if (!state.activeTimerTaskId) return
 
-    // Check if pause period has ended
-    if (state.timerPaused && state.pauseResumeAt) {
-      if (Date.now() >= state.pauseResumeAt) {
+    // Paused: check auto-resume, trigger re-render for countdown display
+    if (state.timerPaused) {
+      if (state.pauseResumeAt && Date.now() >= state.pauseResumeAt) {
         resumeTimer()
         showToast('Timer resumed')
+      } else {
+        triggerUpdate()
       }
       return
     }
-
-    if (state.timerPaused) return
 
     const remaining = tickTimer()
 
@@ -31,7 +31,7 @@ export function startTimerLoop() {
       sendNotification('Time is up!', `${title} - timer has finished`)
       showToast(`${title} - time is up!`)
     }
-  }, 250)
+  }, 1000)
 }
 
 export function stopTimerLoop() {

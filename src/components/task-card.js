@@ -3,21 +3,37 @@ import {
   deleteTask,
   moveTask,
   startTimer,
+  pauseTimerForInterruption,
+  resumeTimer,
+  stopTimer,
+  resetTimerProgress,
 } from '../state/actions.js'
 import { getState } from '../state/store.js'
 import { makeDraggable } from '../utils/drag-drop.js'
 import { showToast } from './toast.js'
 
-export function renderTaskCard(task, { onEdit, onAddSubtask }) {
+function formatTime(ms) {
+  const totalSeconds = Math.ceil(ms / 1000)
+  const m = Math.floor(totalSeconds / 60)
+  const s = totalSeconds % 60
+  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+}
+
+function getTimerColor(remaining, total) {
+  if (total <= 0) return 'green'
+  const ratio = remaining / total
+  if (ratio > 0.5) return 'green'
+  if (ratio > 0.2) return 'yellow'
+  return 'red'
+}
+
+export function renderTaskCard(task, { onEdit }) {
   const state = getState()
   const el = document.createElement('div')
   el.className = `task-card${task.completed ? ' completed' : ''}`
   el.dataset.taskId = task.id
 
-  // Only top-level tasks are draggable
-  if (!task.parentId) {
-    makeDraggable(el, task.id)
-  }
+  makeDraggable(el, task.id)
 
   // Header: checkbox + title
   const header = document.createElement('div')
@@ -35,7 +51,18 @@ export function renderTaskCard(task, { onEdit, onAddSubtask }) {
   header.append(checkbox, title)
   el.appendChild(header)
 
-  // Meta: tags + estimated time
+  // Parent label
+  if (task.parentId) {
+    const parentTask = state.tasks[task.parentId]
+    if (parentTask) {
+      const label = document.createElement('div')
+      label.className = 'task-parent-label'
+      label.textContent = parentTask.title
+      el.appendChild(label)
+    }
+  }
+
+  // Meta: tags + time
   if (task.tags.length > 0 || task.estimatedMinutes) {
     const meta = document.createElement('div')
     meta.className = 'task-meta'
@@ -57,68 +84,89 @@ export function renderTaskCard(task, { onEdit, onAddSubtask }) {
     el.appendChild(meta)
   }
 
-  // Timer start button (inProgress + has time + no active timer on this task)
-  if (
-    task.status === 'inProgress' &&
-    task.estimatedMinutes &&
-    !task.parentId &&
-    state.activeTimerTaskId !== task.id
-  ) {
-    const timerBtn = document.createElement('button')
-    timerBtn.className = 'btn btn-sm btn-primary'
-    timerBtn.textContent = 'Start Timer'
-    timerBtn.style.marginTop = '0.5rem'
-    timerBtn.addEventListener('click', (e) => {
-      e.stopPropagation()
-      startTimer(task.id)
-    })
-    el.appendChild(timerBtn)
-  }
+  // Timer section (only for inProgress tasks with estimated time)
+  if (task.status === 'inProgress' && task.estimatedMinutes) {
+    const isActiveTimer = state.activeTimerTaskId === task.id
+    const totalMs = task.estimatedMinutes * 60 * 1000
+    const hasSavedProgress = task.timerElapsedBeforePause > 0
 
-  // Subtasks
-  if (task.childIds.length > 0) {
-    const subtaskList = document.createElement('div')
-    subtaskList.className = 'subtask-list'
+    if (isActiveTimer) {
+      const timerSection = document.createElement('div')
+      timerSection.className = 'card-timer'
 
-    for (const childId of task.childIds) {
-      const child = state.tasks[childId]
-      if (!child) continue
+      const timeDisplay = document.createElement('span')
+      timeDisplay.className = `timer-time ${getTimerColor(state.timerRemainingMs, totalMs)}`
+      timeDisplay.textContent = formatTime(state.timerRemainingMs)
+      timerSection.appendChild(timeDisplay)
 
-      const item = document.createElement('div')
-      item.className = `subtask-item${child.completed ? ' completed' : ''}`
-
-      const childCheck = document.createElement('input')
-      childCheck.type = 'checkbox'
-      childCheck.checked = child.completed
-      childCheck.addEventListener('change', () => toggleComplete(childId))
-
-      const childLabel = document.createElement('span')
-      childLabel.textContent = child.title
-
-      if (child.estimatedMinutes) {
-        const childTime = document.createElement('span')
-        childTime.className = 'time-badge'
-        childTime.textContent = `${child.estimatedMinutes}min`
-        item.append(childCheck, childLabel, childTime)
-      } else {
-        item.append(childCheck, childLabel)
+      if (state.timerPaused) {
+        const pausedLabel = document.createElement('span')
+        pausedLabel.className = 'timer-paused-label'
+        if (state.pauseResumeAt) {
+          const remain = Math.max(0, Math.ceil((state.pauseResumeAt - Date.now()) / 1000))
+          const pm = Math.floor(remain / 60)
+          const ps = remain % 60
+          pausedLabel.textContent = `PAUSED (${pm}:${String(ps).padStart(2, '0')})`
+        } else {
+          pausedLabel.textContent = 'PAUSED'
+        }
+        timerSection.appendChild(pausedLabel)
       }
 
-      subtaskList.appendChild(item)
+      const controls = document.createElement('div')
+      controls.className = 'card-timer-controls'
+
+      if (state.timerPaused) {
+        const resumeBtn = document.createElement('button')
+        resumeBtn.className = 'btn btn-sm btn-primary'
+        resumeBtn.textContent = 'Resume'
+        resumeBtn.addEventListener('click', (e) => { e.stopPropagation(); resumeTimer() })
+        controls.appendChild(resumeBtn)
+      } else {
+        const interruptBtn = document.createElement('button')
+        interruptBtn.className = 'btn btn-sm'
+        interruptBtn.textContent = 'Interrupt'
+        interruptBtn.addEventListener('click', (e) => {
+          e.stopPropagation()
+          showInterruptInput(controls, interruptBtn)
+        })
+        controls.appendChild(interruptBtn)
+      }
+
+      const stopBtn = document.createElement('button')
+      stopBtn.className = 'btn btn-sm btn-danger'
+      stopBtn.textContent = 'Stop'
+      stopBtn.addEventListener('click', (e) => { e.stopPropagation(); stopTimer() })
+      controls.appendChild(stopBtn)
+
+      timerSection.appendChild(controls)
+      el.appendChild(timerSection)
+    } else {
+      const timerStart = document.createElement('div')
+      timerStart.className = 'card-timer-start'
+
+      const btn = document.createElement('button')
+      btn.className = 'btn btn-sm btn-primary'
+      if (hasSavedProgress) {
+        const remaining = totalMs - task.timerElapsedBeforePause
+        btn.textContent = `Resume Timer (${formatTime(remaining)})`
+      } else {
+        btn.textContent = 'Start Timer'
+      }
+      btn.addEventListener('click', (e) => { e.stopPropagation(); startTimer(task.id) })
+      timerStart.appendChild(btn)
+
+      if (hasSavedProgress) {
+        const resetBtn = document.createElement('button')
+        resetBtn.className = 'btn btn-sm'
+        resetBtn.textContent = 'Reset'
+        resetBtn.addEventListener('click', (e) => { e.stopPropagation(); resetTimerProgress(task.id) })
+        timerStart.appendChild(resetBtn)
+      }
+
+      el.appendChild(timerStart)
     }
-
-    el.appendChild(subtaskList)
   }
-
-  // Add subtask button
-  const addSubBtn = document.createElement('button')
-  addSubBtn.className = 'add-subtask-btn'
-  addSubBtn.textContent = '+ subtask'
-  addSubBtn.addEventListener('click', (e) => {
-    e.stopPropagation()
-    onAddSubtask(task.id)
-  })
-  el.appendChild(addSubBtn)
 
   // Actions: edit, delete, move arrows
   const actions = document.createElement('div')
@@ -127,57 +175,77 @@ export function renderTaskCard(task, { onEdit, onAddSubtask }) {
   const editBtn = document.createElement('button')
   editBtn.className = 'btn-icon'
   editBtn.textContent = 'Edit'
-  editBtn.addEventListener('click', (e) => {
-    e.stopPropagation()
-    onEdit(task.id)
-  })
+  editBtn.addEventListener('click', (e) => { e.stopPropagation(); onEdit(task.id) })
 
   const deleteBtn = document.createElement('button')
   deleteBtn.className = 'btn-icon delete'
   deleteBtn.textContent = 'Del'
-  deleteBtn.addEventListener('click', (e) => {
-    e.stopPropagation()
-    deleteTask(task.id)
-  })
+  deleteBtn.addEventListener('click', (e) => { e.stopPropagation(); deleteTask(task.id) })
 
   actions.append(editBtn, deleteBtn)
 
-  // Move arrows (only for top-level tasks)
-  if (!task.parentId) {
-    const arrows = document.createElement('div')
-    arrows.className = 'move-arrows'
+  const arrows = document.createElement('div')
+  arrows.className = 'move-arrows'
+  const statuses = ['todo', 'inProgress', 'done']
+  const currentIdx = statuses.indexOf(task.status)
 
-    const statuses = ['todo', 'inProgress', 'done']
-    const currentIdx = statuses.indexOf(task.status)
-
-    if (currentIdx > 0) {
-      const leftBtn = document.createElement('button')
-      leftBtn.className = 'btn-icon'
-      leftBtn.textContent = '\u2190'
-      leftBtn.addEventListener('click', (e) => {
-        e.stopPropagation()
-        const result = moveTask(task.id, statuses[currentIdx - 1])
-        if (!result.ok) showToast(result.error, 'error')
-      })
-      arrows.appendChild(leftBtn)
-    }
-
-    if (currentIdx < statuses.length - 1) {
-      const rightBtn = document.createElement('button')
-      rightBtn.className = 'btn-icon'
-      rightBtn.textContent = '\u2192'
-      rightBtn.addEventListener('click', (e) => {
-        e.stopPropagation()
-        const result = moveTask(task.id, statuses[currentIdx + 1])
-        if (!result.ok) showToast(result.error, 'error')
-      })
-      arrows.appendChild(rightBtn)
-    }
-
-    actions.appendChild(arrows)
+  if (currentIdx > 0) {
+    const leftBtn = document.createElement('button')
+    leftBtn.className = 'btn-icon'
+    leftBtn.textContent = '\u2190'
+    leftBtn.addEventListener('click', (e) => {
+      e.stopPropagation()
+      const result = moveTask(task.id, statuses[currentIdx - 1])
+      if (!result.ok) showToast(result.error, 'error')
+    })
+    arrows.appendChild(leftBtn)
   }
 
+  if (currentIdx < statuses.length - 1) {
+    const rightBtn = document.createElement('button')
+    rightBtn.className = 'btn-icon'
+    rightBtn.textContent = '\u2192'
+    rightBtn.addEventListener('click', (e) => {
+      e.stopPropagation()
+      const result = moveTask(task.id, statuses[currentIdx + 1])
+      if (!result.ok) showToast(result.error, 'error')
+    })
+    arrows.appendChild(rightBtn)
+  }
+
+  actions.appendChild(arrows)
   el.appendChild(actions)
 
   return el
+}
+
+function showInterruptInput(container, replaceEl) {
+  const form = document.createElement('div')
+  form.className = 'interrupt-form'
+
+  const input = document.createElement('input')
+  input.type = 'number'
+  input.min = '1'
+  input.placeholder = 'min'
+  input.value = '5'
+
+  const okBtn = document.createElement('button')
+  okBtn.className = 'btn btn-sm btn-primary'
+  okBtn.textContent = 'OK'
+  okBtn.addEventListener('click', (e) => {
+    e.stopPropagation()
+    const minutes = parseInt(input.value, 10)
+    if (minutes > 0) pauseTimerForInterruption(minutes)
+  })
+
+  const cancelBtn = document.createElement('button')
+  cancelBtn.className = 'btn btn-sm'
+  cancelBtn.textContent = 'Cancel'
+  cancelBtn.addEventListener('click', (e) => {
+    e.stopPropagation()
+    form.replaceWith(replaceEl)
+  })
+
+  form.append(input, okBtn, cancelBtn)
+  replaceEl.replaceWith(form)
 }
